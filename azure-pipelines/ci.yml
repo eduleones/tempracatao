@@ -1,0 +1,87 @@
+stages:
+  - stage: CI
+    variables:
+      - group: CI - API
+    jobs:
+      - job: Build
+        services:
+          postgres: postgres
+        steps:
+          - task: UsePythonVersion@0
+            inputs:
+              versionSpec: "3.10"
+              addToPath: true
+              architecture: "x64"
+            displayName: "Use Python 3.10"
+
+          - task: PipAuthenticate@1
+            displayName: 'Pip Authenticate'
+            inputs:
+              artifactFeeds: BoticarioFeed
+              onlyAddExtraIndex: true
+
+          - script: make ci-dependencies
+            displayName: "Install dependencies"
+            env:
+              ARTIFACTS_KEYRING_NONINTERACTIVE_MODE: true
+
+          - script: make lint
+            displayName: "Run lint"
+
+          - script: make test-security
+            displayName: "Run security check"
+
+          - script: make test-coverage
+            displayName: "Run tests"
+
+          - script: make manager args="spectacular --format openapi-json"
+            displayName: "Extract Swagger"
+
+          - task: PublishCodeCoverageResults@1
+            inputs:
+              codeCoverageTool: Cobertura
+              summaryFileLocation: "$(System.DefaultWorkingDirectory)/**/coverage.xml"
+              reportDirectory: "$(System.DefaultWorkingDirectory)/**/htmlcov"
+
+          - task: SonarCloudPrepare@1
+            inputs:
+              SonarCloud: "$(configuration.sonar.serviceconnection)"
+              organization: "$(configuration.sonar.organization)"
+              scannerMode: "CLI"
+              configMode: "file"
+              configFile: "sonar-project.properties"
+
+          - task: SonarCloudAnalyze@1
+          - task: SonarCloudPublish@1
+          - task: sonarcloud-buildbreaker@2
+            inputs:
+              SonarCloud: "$(configuration.sonar.serviceconnection)"
+              organization: "$(configuration.sonar.organization)"
+
+      - job: Docker
+        condition: and(succeeded(), ne(variables['Build.Reason'], 'PullRequest'))
+        dependsOn: Build
+        steps:
+          - task: PipAuthenticate@1
+            displayName: 'Pip Authenticate'
+            inputs:
+              artifactFeeds: BoticarioFeed
+              onlyAddExtraIndex: true
+          - task: Docker@2
+            displayName: Docker
+            inputs:
+              repository: $(configuration.application.image)
+              command: "build"
+              Dockerfile: "**/Dockerfile"
+              tags: $(configuration.containerRegistry.buildTag)
+              arguments: --build-arg INDEX_URL="$(PIP_EXTRA_INDEX_URL)"
+          - task: ECRPushImage@1
+            displayName: ECR Push Image
+            inputs:
+              awsCredentials: $(configuration.aws.credentials)
+              regionName: "us-east-1"
+              imageSource: "imagename"
+              sourceImageName: $(configuration.application.image)
+              repositoryName: $(configuration.application.image)
+              sourceImageTag: $(configuration.containerRegistry.buildTag)
+              pushTag: $(configuration.containerRegistry.buildTag)

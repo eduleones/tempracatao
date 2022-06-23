@@ -1,0 +1,31 @@
+{
+    "dependencies": {
+        "release-it": "^14.0.3",
+        "@release-it/bumper": "^3.0.1",
+        "news-fragments": "^1.13.0"
+    },
+    "release-it": {
+        "npm": false,
+        "plugins": {
+            "news-fragments": {},
+            "@release-it/bumper": {
+                "out": [
+                    {
+                        "file": "pyproject.toml",
+                        "type": "text/toml",
+                        "path": "tool.poetry.version"
+                    },
+                    {
+                        "file": "sonar-project.properties",
+                        "type": "text/x-properties",
+                        "path": "sonar.projectVersion"
+                    },
+                    {
+                        "file": "src/tempracatao/__init__.py",
+                        "type": "text/plain"
+                    }
+                ]
+            }
+        }
+    }
+}
